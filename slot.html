@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スロットマシン</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f8f9fa;
+      font-family: Arial, sans-serif;
+      position: relative;
+    }
+
+    #menu-button {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #password-modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: white;
+      border: 2px solid #333;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      z-index: 1000;
+    }
+
+    #password-modal input {
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    #password-modal button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+    }
+
+    #slot-machine {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .reel {
+      width: 100px;
+      height: 300px;
+      background-color: #fff;
+      border: 2px solid #333;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column; /* リール内は縦並び */
+      justify-content: center;
+      align-items: center;
+      transition: border 1s ease-in-out;
+    }
+
+    .reel img {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+      transition: transform 0.1s ease-in-out;
+    }
+
+    .stop-button {
+      width: 50px;
+      height: 50px;
+      background-color: red;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #result {
+      font-size: 20px;
+      color: green;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    /* GOGOランプのスタイル */
+    #gogo-lamp {
+      position: absolute;
+      top: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100px;
+      height: 50px;
+      background-color: #ddd;
+      border-radius: 25px;
+      text-align: center;
+      line-height: 50px;
+      font-size: 18px;
+      color: white;
+      display: none;
+    }
+
+    #gogo-lamp.on {
+      background-color: red;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0% { background-color: red; }
+      50% { background-color: yellow; }
+      100% { background-color: red; }
+    }
+
+    /* 虹色に発光する枠線のアニメーション */
+    @keyframes rainbow-border {
+      0% { border-color: red; }
+      14% { border-color: orange; }
+      28% { border-color: yellow; }
+      42% { border-color: green; }
+      57% { border-color: blue; }
+      71% { border-color: indigo; }
+      85% { border-color: violet; }
+      100% { border-color: red; }
+    }
+
+  </style>
+</head>
+<body>
+  <!-- GameStartボタン -->
+  <button id="game-start-button">GameStart</button>
+
+  <button id="menu-button" style="display:none;">メニュー</button>
+
+  <div id="overlay"></div>
+  <div id="password-modal">
+    <p>パスワードを入力してください:</p>
+    <input type="password" id="password-input" placeholder="パスワードを入力">
+    <button id="submit-password">送信</button>
+    <button id="close-modal">閉じる</button>
+  </div>
+
+  <div id="slot-machine" style="display: none;">
+    <div class="reel" id="reel1"></div>
+    <div class="reel" id="reel2"></div>
+    <div class="reel" id="reel3"></div>
+  </div>
+  <div id="slot-controls" style="display: none;">
+    <button class="stop-button" data-reel="1">Stop</button>
+    <button class="stop-button" data-reel="2">Stop</button>
+    <button class="stop-button" data-reel="3">Stop</button>
+  </div>
+  <button id="spin-button" style="display: none;">スピン！</button>
+  <div id="result" style="display: none;"></div>
+
+  <!-- GOGOランプ -->
+  <div id="gogo-lamp">GOGOランプ</div>
+
+  <!-- スピード設定 -->
+  <div id="speed-settings" style="display: none;">
+    <p>リールの回転速度を設定：</p>
+    <input type="number" id="speed-input" placeholder="回転スピード（ミリ秒）" min="50" value="100">
+    <button id="change-speed">設定</button>
+  </div>
+
+  <script>
+    const symbols = [
+      "images/symbol1.png",
+      "images/symbol2.png",
+      "images/symbol3.png",
+      "images/symbol4.png",
+      "images/symbol5.png",
+      "images/symbol6.png"
+    ];
+
+    const reels = [
+      document.getElementById("reel1"),
+      document.getElementById("reel2"),
+      document.getElementById("reel3"),
+    ];
+
+    const spinButton = document.getElementById("spin-button");
+    const stopButtons = document.querySelectorAll(".stop-button");
+    const resultDisplay = document.getElementById("result");
+    const gogoLamp = document.getElementById("gogo-lamp");
+
+    let isSpinning = [false, false, false];
+    let spinIntervals = [];
+    let stopCount = 0;
+    let currentStopIndex = 0;
+    let spinSpeed = 100; // 初期回転速度（ミリ秒）
+
+    // パスワードモーダルの設定
+    const menuButton = document.getElementById("menu-button");
+    const overlay = document.getElementById("overlay");
+    const passwordModal = document.getElementById("password-modal");
+    const passwordInput = document.getElementById("password-input");
+    const submitPasswordButton = document.getElementById("submit-password");
+    const closeModalButton = document.getElementById("close-modal");
+
+    const correctPassword = "masahiro1220"; // 正しいパスワード
+
+    menuButton.addEventListener("click", () => {
+      overlay.style.display = "block";
+      passwordModal.style.display = "block";
+    });
+
+    closeModalButton.addEventListener("click", () => {
+      overlay.style.display = "none";
+      passwordModal.style.display = "none";
+    });
+
+    submitPasswordButton.addEventListener("click", () => {
+      if (passwordInput.value === correctPassword) {
+        overlay.style.display = "none";
+        passwordModal.style.display = "none";
+        document.getElementById("speed-settings").style.display = "block"; // スピード設定ボタンを表示
+      } else {
+        alert("パスワードが正しくありません");
+      }
+    });
+
+    function shuffleSymbols() {
+      // ランダムにシンボルを並べ替える
+      return symbols.sort(() => Math.random() - 0.5);
+    }
+
+    function createReelContent(reel) {
+      const shuffledSymbols = shuffleSymbols();
+      reel.innerHTML = ""; // リールをリセット
+
+      // リールに表示する画像数を3つに制限
+      for (let i = 0; i < 3; i++) {
+        const img = document.createElement("img");
+        img.src = shuffledSymbols[i];
+        reel.appendChild(img);
+      }
+    }
+
+    function spin() {
+      resultDisplay.textContent = "回転中...";
+      stopCount = 0;
+      currentStopIndex = 0;
+      stopButtons.forEach(button => button.disabled = false);
+      gogoLamp.style.display = "block"; // GOGOランプを表示
+
+      reels.forEach((reel, index) => {
+        createReelContent(reel); // リールをランダムな配置に設定
+        isSpinning[index] = true;
+        spinIntervals[index] = setInterval(() => {
+          const firstChild = reel.firstElementChild;
+          reel.appendChild(firstChild); // リールのシンボルを回転
+        }, spinSpeed);
+      });
+    }
+
+    function stopReel(index) {
+      if (!isSpinning[index]) return;
+
+      clearInterval(spinIntervals[index]);
+      isSpinning[index] = false;
+      stopCount++;
+
+      if (stopCount === 3) checkResult();
+    }
+
+    function checkResult() {
+      const firstSymbols = reels.map(reel => reel.firstElementChild.src);
+      const isWin = firstSymbols.every(src => src === firstSymbols[0]);
+
+      if (isWin) {
+        // 勝利時、枠線を虹色に発光させる
+        reels.forEach(reel => {
+          reel.style.animation = "rainbow-border 1s infinite"; 
+        });
+        gogoLamp.classList.add("on"); // 勝利時にGOGOランプを点滅
+        resultDisplay.textContent = "おめでとう！揃いました！";
+      } else {
+        reels.forEach(reel => {
+          reel.style.animation = "none"; // 外れた場合はアニメーションを停止
+        });
+        gogoLamp.classList.remove("on"); // 外れた場合、ランプを消す
+        resultDisplay.textContent = "もう一回挑戦してね！";
+      }
+    }
+
+    spinButton.addEventListener("click", () => {
+      if (isSpinning.some(state => state)) return;
+      spin();
+    });
+
+    stopButtons.forEach((button, index) => {
+      button.addEventListener("click", () => stopReel(index));
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Enter") {
+        spinButton.click(); // Enterキーでスピンボタンをクリック
+      }
+      if (e.code === "Space") {
+        if (currentStopIndex < 3) {
+          stopButtons[currentStopIndex].click();
+          currentStopIndex++;
+        }
+      }
+    });
+
+    // スピード設定
+    document.getElementById("change-speed").addEventListener("click", () => {
+      const newSpeed = parseInt(document.getElementById("speed-input").value, 10);
+      if (!isNaN(newSpeed) && newSpeed >= 50) {
+        spinSpeed = newSpeed;
+        alert(`スピードが${newSpeed}ミリ秒に設定されました！`);
+      } else {
+        alert("無効なスピードです！");
+      }
+    });
+
+    // GameStartボタンをクリックするとゲーム開始
+    document.getElementById("game-start-button").addEventListener("click", () => {
+      document.getElementById("game-start-button").style.display = "none";
+      document.getElementById("slot-machine").style.display = "flex";
+      document.getElementById("slot-controls").style.display = "block";
+      document.getElementById("spin-button").style.display = "inline-block";
+      document.getElementById("menu-button").style.display = "inline-block";
+    });
+  </script>
+</body>
+</html>
